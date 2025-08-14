@@ -1,239 +1,364 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateBotResponse } from '../../utils/chatUtils';
+import { checkApiStatus } from '../../utils/apiUtils';
 
 const ChatBot = () => {
-    const navigate = useNavigate();
-    const [isOpen, setIsOpen] = useState(false);
-    const [movies, setMovies] = useState([]);
-    const [messages, setMessages] = useState([
-        {
-            id: 1,
-            text: "Merhaba! Cokelek Film Asistanı'na hoş geldiniz. Size nasıl yardımcı olabilirim?",
-            sender: 'bot',
-            timestamp: new Date(),
-            films: []
+  const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
+  const [movies, setMovies] = useState([]);
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      text: "Merhaba! Cokelek Film Asistanı'na hoş geldiniz. Size nasıl yardımcı olabilirim?",
+      sender: 'bot',
+      timestamp: new Date(),
+      films: []
+    }
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [isMoviesLoaded, setIsMoviesLoaded] = useState(false);
+  const [apiStatus, setApiStatus] = useState('unknown'); // 'online', 'offline', 'unknown'
+
+  const API_URL = import.meta.env.VITE_NGROK_API_URL || '';
+
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Film verilerini yükle
+  useEffect(() => {
+    fetch('/data/movies.json')
+      .then(response => response.json())
+      .then(data => {
+        setMovies(data);
+        setIsMoviesLoaded(true);
+      })
+      .catch(error => {
+        console.error('Film verileri yüklenirken hata oluştu:', error);
+      });
+  }, []);
+
+  // API durumunu kontrol et
+  useEffect(() => {
+    const checkAPIConnection = async () => {
+      try {
+        if (!API_URL) {
+          console.warn('API URL tanımlanmamış');
+          setApiStatus('offline');
+          return;
         }
+
+        const isApiOnline = await checkApiStatus(API_URL);
+        setApiStatus(isApiOnline ? 'online' : 'offline');
+      } catch (error) {
+        console.error('API durum kontrolü sırasında hata:', error);
+        setApiStatus('offline');
+      }
+    };
+
+    // Sayfa yüklendiğinde ve her 60 saniyede bir kontrol et
+    checkAPIConnection();
+    const intervalId = setInterval(checkAPIConnection, 60000);
+
+    return () => clearInterval(intervalId);
+  }, [API_URL]);
+
+  // Chat açıldığında mesajları kaydır ve inputa odaklan
+  useEffect(() => {
+    if (isOpen) {
+      scrollToBottom();
+      inputRef.current?.focus();
+    }
+  }, [isOpen]);
+
+  // Yeni mesaj geldiğinde veya bot yazıyorken kaydır
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const toggleChat = () => {
+    setIsOpen(prev => !prev);
+  };
+
+  const handleInputChange = (e) => {
+    setInputText(e.target.value);
+  };
+
+  // Sohbeti sıfırlama fonksiyonu
+  const resetChat = () => {
+    setMessages([
+      {
+        id: Date.now(),
+        text: "Merhaba! Cokelek Film Asistanı'na hoş geldiniz. Size nasıl yardımcı olabilirim?",
+        sender: 'bot',
+        timestamp: new Date(),
+        films: []
+      }
     ]);
-    const [inputText, setInputText] = useState('');
-    const [isTyping, setIsTyping] = useState(false);
-    const [isMoviesLoaded, setIsMoviesLoaded] = useState(false);
+  };
+  const sendQueryToAPI = async (query) => {
+    if (!API_URL) {
+      throw new Error('API URL tanımlanmamış');
+    }
 
-    const messagesEndRef = useRef(null);
-    const inputRef = useRef(null);
+    try {
+      console.log('API isteği gönderiliyor:', API_URL);
 
-    // Film verilerini yükle
-    useEffect(() => {
-        fetch('/data/movies.json')
-            .then(response => response.json())
-            .then(data => {
-                setMovies(data);
-                setIsMoviesLoaded(true);
-            })
-            .catch(error => {
-                console.error('Film verileri yüklenirken hata oluştu:', error);
-            });
-    }, []);
+      // Doğrudan POST isteği yap (basitleştirilmiş)
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+        mode: 'cors' // 'cors' veya 'no-cors' kullanın
+      });
 
-    // Chat açıldığında mesajları kaydır ve inputa odaklan
-    useEffect(() => {
-        if (isOpen) {
-            scrollToBottom();
-            inputRef.current?.focus();
-        }
-    }, [isOpen]);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
 
-    // Yeni mesaj geldiğinde veya bot yazıyorken kaydır
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages, isTyping]);
+      const data = await response.json();
+      console.log('API yanıtı:', data);
+      return data.response;
+    } catch (error) {
+      console.error('API isteği başarısız oldu:', error);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      // CORS hatası durumunda, lokal yanıt döndür
+      return `API bağlantısı kurulamadı: ${error.message}. Yerel mod kullanılıyor.`;
+    }
+  };
+  // Film verileri arasında arama yapma fonksiyonu
+  const findFilmsInResponse = (apiResponse) => {
+    // Bu basit bir film başlıklarını bulma fonksiyonu
+    // API yanıtlarını inceleyerek film adlarını tespit eder
+    const foundFilms = [];
+
+    if (!apiResponse || !movies || movies.length === 0) return [];
+
+    // Her filmi API yanıtında arayalım
+    for (const movie of movies) {
+      const titleLower = movie.title.toLowerCase();
+
+      // Film adı API yanıtında geçiyor mu kontrol et
+      if (apiResponse.toLowerCase().includes(titleLower)) {
+        foundFilms.push(movie);
+      }
+    }
+
+    return foundFilms.slice(0, 3); // En fazla 3 film göster
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!inputText.trim() || !isMoviesLoaded) return;
+
+    // Kullanıcı mesajını ekle
+    const userMessage = {
+      id: Date.now(),
+      text: inputText,
+      sender: 'user',
+      timestamp: new Date(),
+      films: []
     };
 
-    const toggleChat = () => {
-        setIsOpen(prev => !prev);
-    };
+    const currentInput = inputText.trim(); // Kullanıcı mesajını sakla
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
 
-    const handleInputChange = (e) => {
-        setInputText(e.target.value);
-    };
+    // Bot yazıyor animasyonu
+    setIsTyping(true);
 
-    // Sohbeti sıfırlama fonksiyonu
-    const resetChat = () => {
-        setMessages([
-            {
-                id: Date.now(),
-                text: "Merhaba! Cokelek Film Asistanı'na hoş geldiniz. Size nasıl yardımcı olabilirim?",
-                sender: 'bot',
-                timestamp: new Date(),
-                films: []
-            }
-        ]);
-    };
+    try {
+      // API bağlantısı varsa ve URL tanımlıysa
+      if (apiStatus === 'online' && API_URL) {
+        // API'ye sorgu gönder
+        const apiResponse = await sendQueryToAPI(currentInput);
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
+        // Film verileri arasında bu yanıtta geçen filmleri bul
+        const relatedFilms = findFilmsInResponse(apiResponse);
 
-        if (!inputText.trim() || !isMoviesLoaded) return;
+        // Bot yanıtını ekle
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          text: apiResponse,
+          sender: 'bot',
+          timestamp: new Date(),
+          films: relatedFilms
+        }]);
+      } else {
+        // API bağlantısı yoksa yerel cevap üret
+        const { text, films } = generateBotResponse(currentInput, movies);
 
-        // Kullanıcı mesajını ekle
-        const userMessage = {
-            id: Date.now(),
-            text: inputText,
-            sender: 'user',
-            timestamp: new Date(),
-            films: []
-        };
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          text: `${apiStatus === 'offline' ? "API bağlantısı yok. " : ""}${text}`,
+          sender: 'bot',
+          timestamp: new Date(),
+          films: films
+        }]);
+      }
+    } catch (error) {
+      // Hata durumunda yerel cevap üret
+      const { text, films } = generateBotResponse(currentInput, movies);
 
-        const currentInput = inputText.trim(); // Kullanıcı mesajını sakla
-        setMessages(prev => [...prev, userMessage]);
-        setInputText('');
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        text: `API hatası: ${error.message}. Yerel cevap: ${text}`,
+        sender: 'bot',
+        timestamp: new Date(),
+        films: films
+      }]);
 
-        // Bot yazıyor animasyonu
-        setIsTyping(true);
+      // API durumunu güncelle
+      setApiStatus('offline');
+    } finally {
+      setIsTyping(false);
+    }
+  };
 
-        // Gerçek film verileriyle cevap oluşturma
-        setTimeout(() => {
-            const { text, films } = generateBotResponse(currentInput, movies);
-            setIsTyping(false);
+  const handleFilmClick = (filmId) => {
+    // Film detay sayfasına yönlendirme
+    navigate(`/movie/${filmId}`);
+  };
 
-            setMessages(prev => [...prev, {
-                id: Date.now() + 1,
-                text: text,
-                sender: 'bot',
-                timestamp: new Date(),
-                films: films || []
-            }]);
-        }, 1000 + Math.random() * 1000); // 1-2 saniye arası rastgele gecikme
-    };
+  return (
+    <>
+      {/* Chat Bot Toggle Button */}
+      <button
+        className={`chat-toggle-btn ${isOpen ? 'open' : ''}`}
+        onClick={toggleChat}
+        aria-label="Toggle chat assistant"
+      >
+        {!isOpen ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+          </svg>
+        )}
+      </button>
 
-    const handleFilmClick = (filmId) => {
-        // Film detay sayfasına yönlendirme
-        navigate(`/movie/${filmId}`);
-    };
-
-    return (
-        <>
-            {/* Chat Bot Toggle Button */}
-            <button
-                className={`chat-toggle-btn ${isOpen ? 'open' : ''}`}
-                onClick={toggleChat}
-                aria-label="Toggle chat assistant"
-            >
-                {!isOpen ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
-                    </svg>
-                ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
-                    </svg>
-                )}
-            </button>
-
-            {/* Chat Window */}
-            <div className={`chat-container ${isOpen ? 'open' : ''}`}>
-                <div className="chat-header">
-                    <div className="chat-title">
-                        <div className="chat-avatar">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-                                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
-                            </svg>
-                        </div>
-                        <h3>Cokelek Film Asistanı</h3>
-                    </div>
-                    <div className="chat-header-buttons">
-                        {/* Sıfırlama Butonu */}
-                        <button className="chat-reset-btn" onClick={resetChat} title="Sohbeti sıfırla">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-                            </svg>
-                        </button>
-                        {/* Kapatma Butonu */}
-                        <button className="chat-close-btn" onClick={toggleChat}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div className="chat-messages">
-                    {messages.map(msg => (
-                        <div
-                            key={msg.id}
-                            className={`chat-message ${msg.sender}`}
-                        >
-                            <div className="chat-bubble">
-                                {msg.text}
-                                <span className="chat-time">
-                                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                            </div>
-
-                            {/* Film Önerileri */}
-                            {msg.films && msg.films.length > 0 && (
-                                <div className="chat-films-container">
-                                    {msg.films.map(film => (
-                                        <div
-                                            key={film.id}
-                                            className="chat-film-card"
-                                            onClick={() => handleFilmClick(film.id)}
-                                        >
-                                            <div className="chat-film-poster">
-                                                <img src={film.poster} alt={film.title} />
-                                            </div>
-                                            <div className="chat-film-info">
-                                                <h4 className="chat-film-title">{film.title}</h4>
-                                                <div className="chat-film-meta">
-                                                    <span>{film.year}</span>
-                                                    <span className="chat-film-rating">★ {film.rating.toFixed(1)}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-
-                    {isTyping && (
-                        <div className="chat-message bot">
-                            <div className="chat-bubble typing">
-                                <span className="dot"></span>
-                                <span className="dot"></span>
-                                <span className="dot"></span>
-                            </div>
-                        </div>
-                    )}
-
-                    <div ref={messagesEndRef} />
-                </div>
-
-                <form className="chat-input-form" onSubmit={handleSubmit}>
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={inputText}
-                        onChange={handleInputChange}
-                        placeholder="Film hakkında bir soru sorun..."
-                        className="chat-input"
-                    />
-                    <button
-                        type="submit"
-                        className="chat-send-btn"
-                        disabled={!inputText.trim() || !isMoviesLoaded}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                        </svg>
-                    </button>
-                </form>
+      {/* Chat Window */}
+      <div className={`chat-container ${isOpen ? 'open' : ''}`}>
+        <div className="chat-header">
+          <div className="chat-title">
+            <div className="chat-avatar">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
+              </svg>
             </div>
+            <h3>Cokelek Film Asistanı</h3>
+          </div>
+          <div className="chat-header-buttons">
+            {/* API Durum Göstergesi */}
+            <div
+              className={`api-status ${apiStatus}`}
+              title={apiStatus === 'online'
+                ? 'API bağlantısı aktif'
+                : apiStatus === 'offline'
+                  ? 'API bağlantısı yok'
+                  : 'API durumu kontrol ediliyor'}
+            >
+              <span className="api-status-dot"></span>
+            </div>
+            {/* Sıfırlama Butonu */}
+            <button className="chat-reset-btn" onClick={resetChat} title="Sohbeti sıfırla">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+              </svg>
+            </button>
+            {/* Kapatma Butonu */}
+            <button className="chat-close-btn" onClick={toggleChat}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+              </svg>
+            </button>
+          </div>
+        </div>
 
-            <style>{`
+        <div className="chat-messages">
+          {messages.map(msg => (
+            <div
+              key={msg.id}
+              className={`chat-message ${msg.sender}`}
+            >
+              <div className="chat-bubble">
+                {msg.text}
+                <span className="chat-time">
+                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              {/* Film Önerileri */}
+              {msg.films && msg.films.length > 0 && (
+                <div className="chat-films-container">
+                  {msg.films.map(film => (
+                    <div
+                      key={film.id}
+                      className="chat-film-card"
+                      onClick={() => handleFilmClick(film.id)}
+                    >
+                      <div className="chat-film-poster">
+                        <img src={film.poster} alt={film.title} />
+                      </div>
+                      <div className="chat-film-info">
+                        <h4 className="chat-film-title">{film.title}</h4>
+                        <div className="chat-film-meta">
+                          <span>{film.year}</span>
+                          <span className="chat-film-rating">★ {film.rating.toFixed(1)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isTyping && (
+            <div className="chat-message bot">
+              <div className="chat-bubble typing">
+                <span className="dot"></span>
+                <span className="dot"></span>
+                <span className="dot"></span>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        <form className="chat-input-form" onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputText}
+            onChange={handleInputChange}
+            placeholder="Film hakkında bir soru sorun..."
+            className="chat-input"
+          />
+          <button
+            type="submit"
+            className="chat-send-btn"
+            disabled={!inputText.trim() || !isMoviesLoaded}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      <style>{`
         /* Chat Bot Container */
         .chat-container {
           position: fixed;
@@ -299,6 +424,7 @@ const ChatBot = () => {
         .chat-header-buttons {
           display: flex;
           gap: 10px;
+          align-items: center;
         }
         
         .chat-close-btn, .chat-reset-btn {
@@ -320,6 +446,41 @@ const ChatBot = () => {
 
         .chat-reset-btn:hover {
           transform: rotate(45deg);
+        }
+        
+        /* API Status Indicator */
+        .api-status {
+          display: flex;
+          align-items: center;
+          padding: 0 5px;
+        }
+        
+        .api-status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
+        
+        .api-status.online .api-status-dot {
+          background-color: #4CAF50;
+          box-shadow: 0 0 5px #4CAF50;
+        }
+        
+        .api-status.offline .api-status-dot {
+          background-color: #F44336;
+          box-shadow: 0 0 5px #F44336;
+        }
+        
+        .api-status.unknown .api-status-dot {
+          background-color: #FFC107;
+          box-shadow: 0 0 5px #FFC107;
+          animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+          0% { opacity: 0.4; }
+          50% { opacity: 1; }
+          100% { opacity: 0.4; }
         }
         
         /* Chat Messages Area */
@@ -591,8 +752,8 @@ const ChatBot = () => {
           }
         }
       `}</style>
-        </>
-    );
+    </>
+  );
 };
 
 export default ChatBot;
