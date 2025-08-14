@@ -1,12 +1,100 @@
-# React + Vite
+# Cokelek Film Chatbot Projesi
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Bu proje, film veritabanına erişen ve film önerileri sunan bir chatbot içeren web uygulamasıdır. Chatbot, kullanıcıların film hakkında sorular sormasına ve filmlerle ilgili öneriler almasına olanak tanır.
 
-Currently, two official plugins are available:
+## 📋 Özellikler
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Film önerileri ve bilgileri için chatbot arayüzü
+- Film kartları ile görsel öneri sistemi
+- API bağlantısı ile LangGraph tabanlı gelişmiş yanıtlar
+- Yerel film veritabanı desteği
+- Responsive tasarım
 
-## Expanding the ESLint configuration
+## 🛠️ Teknolojiler
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Frontend:** React, Vite
+- **Backend:** Python FastAPI, LangGraph
+- **Deployment:** ngrok (API tünelleme)
+- **Veri:** Yerel JSON film veritabanı
+
+## 🚀 Kurulum
+
+### Frontend (React + Vite)
+
+1. Projeyi klonlayın:
+   ```
+   git clone https://github.com/username/cokelek-film-project.git
+   cd cokelek-film-project
+   ```
+
+2. Bağımlılıkları yükleyin:
+   ```
+   npm install
+   ```
+
+3. `.env` dosyası oluşturun:
+   ```
+   VITE_NGROK_API_URL=https://your-ngrok-url.ngrok-free.app/agent-query/
+   ```
+
+4. Uygulamayı başlatın:
+   ```
+   npm run dev
+   ```
+
+### Backend (Python FastAPI)
+
+1. Gerekli Python paketlerini yükleyin:
+   ```
+   pip install fastapi uvicorn pyngrok langchain
+   ```
+
+2. API'yi başlatın:
+   ```python
+   python api_server.py
+   ```
+
+## 💬 Chatbot Kullanımı
+
+1. Ana sayfadaki sağ alt köşedeki chat simgesine tıklayın
+2. Chatbot penceresinde filmlerle ilgili sorular sorun:
+   - "Aksiyon filmi önerir misin?"
+   - "En yüksek puanlı filmler hangileri?"
+   - "[Yönetmen adı] filmleri göster"
+3. Film kartlarına tıklayarak film detaylarına ulaşabilirsiniz
+
+## 🔄 API Entegrasyonu
+
+- Chatbot, varsayılan olarak ngrok üzerinden yayınlanan bir API'ye bağlanır
+- API durumu, chatbot başlığında gösterge ile belirtilir
+- API bağlantısı yoksa, yerel film veritabanı kullanılır
+
+## 🧩 Proje Yapısı
+
+```
+cokelek-film-project/
+├── public/
+│   └── data/
+│       └── movies.json      # Film veritabanı
+├── src/
+│   ├── components/
+│   │   └── chat/
+│   │       └── ChatBot.jsx  # Chatbot bileşeni
+│   ├── utils/
+│   │   ├── apiUtils.js      # API yardımcı fonksiyonları
+│   │   └── chatUtils.js     # Chatbot yardımcı fonksiyonları
+│   ├── App.jsx
+│   └── main.jsx
+├── .env                     # Çevre değişkenleri
+└── vite.config.js           # Vite yapılandırması
+```
+
+## 📝 Notlar
+
+- API çalışması için `NGROK_AUTH_TOKEN` ortam değişkeni gereklidir
+- Chatbot, API bağlantısı olmadığında bile temel özellikleri sunacak şekilde tasarlanmıştır
+- Film görselleri için yedek mekanizma içerir
+
+---
+
+Projeyle ilgili sorular için: [email@example.com](mailto:email@example.com)
