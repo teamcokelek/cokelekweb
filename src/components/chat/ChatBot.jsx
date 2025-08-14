@@ -1,21 +1,39 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { generateBotResponse } from '../../utils/chatUtils';
 
 const ChatBot = () => {
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
+    const [movies, setMovies] = useState([]);
     const [messages, setMessages] = useState([
         {
             id: 1,
             text: "Merhaba! Cokelek Film Asistanı'na hoş geldiniz. Size nasıl yardımcı olabilirim?",
             sender: 'bot',
-            timestamp: new Date()
+            timestamp: new Date(),
+            films: []
         }
     ]);
     const [inputText, setInputText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [isMoviesLoaded, setIsMoviesLoaded] = useState(false);
 
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+
+    // Film verilerini yükle
+    useEffect(() => {
+        fetch('/data/movies.json')
+            .then(response => response.json())
+            .then(data => {
+                setMovies(data);
+                setIsMoviesLoaded(true);
+            })
+            .catch(error => {
+                console.error('Film verileri yüklenirken hata oluştu:', error);
+            });
+    }, []);
 
     // Chat açıldığında mesajları kaydır ve inputa odaklan
     useEffect(() => {
@@ -49,7 +67,8 @@ const ChatBot = () => {
                 id: Date.now(),
                 text: "Merhaba! Cokelek Film Asistanı'na hoş geldiniz. Size nasıl yardımcı olabilirim?",
                 sender: 'bot',
-                timestamp: new Date()
+                timestamp: new Date(),
+                films: []
             }
         ]);
     };
@@ -57,14 +76,15 @@ const ChatBot = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        if (!inputText.trim()) return;
+        if (!inputText.trim() || !isMoviesLoaded) return;
 
         // Kullanıcı mesajını ekle
         const userMessage = {
             id: Date.now(),
             text: inputText,
             sender: 'user',
-            timestamp: new Date()
+            timestamp: new Date(),
+            films: []
         };
 
         const currentInput = inputText.trim(); // Kullanıcı mesajını sakla
@@ -74,18 +94,24 @@ const ChatBot = () => {
         // Bot yazıyor animasyonu
         setIsTyping(true);
 
-        // Mock cevap için gecikme
+        // Gerçek film verileriyle cevap oluşturma
         setTimeout(() => {
-            const botResponse = generateBotResponse(currentInput);
+            const { text, films } = generateBotResponse(currentInput, movies);
             setIsTyping(false);
 
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
-                text: botResponse,
+                text: text,
                 sender: 'bot',
-                timestamp: new Date()
+                timestamp: new Date(),
+                films: films || []
             }]);
         }, 1000 + Math.random() * 1000); // 1-2 saniye arası rastgele gecikme
+    };
+
+    const handleFilmClick = (filmId) => {
+        // Film detay sayfasına yönlendirme
+        navigate(`/movie/${filmId}`);
     };
 
     return (
@@ -146,6 +172,30 @@ const ChatBot = () => {
                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                             </div>
+
+                            {/* Film Önerileri */}
+                            {msg.films && msg.films.length > 0 && (
+                                <div className="chat-films-container">
+                                    {msg.films.map(film => (
+                                        <div
+                                            key={film.id}
+                                            className="chat-film-card"
+                                            onClick={() => handleFilmClick(film.id)}
+                                        >
+                                            <div className="chat-film-poster">
+                                                <img src={film.poster} alt={film.title} />
+                                            </div>
+                                            <div className="chat-film-info">
+                                                <h4 className="chat-film-title">{film.title}</h4>
+                                                <div className="chat-film-meta">
+                                                    <span>{film.year}</span>
+                                                    <span className="chat-film-rating">★ {film.rating.toFixed(1)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))}
 
@@ -174,7 +224,7 @@ const ChatBot = () => {
                     <button
                         type="submit"
                         className="chat-send-btn"
-                        disabled={!inputText.trim()}
+                        disabled={!inputText.trim() || !isMoviesLoaded}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -301,11 +351,13 @@ const ChatBot = () => {
         /* Message Bubbles */
         .chat-message {
           display: flex;
-          margin-bottom: 8px;
+          flex-direction: column;
+          margin-bottom: 16px;
+          width: 100%;
         }
         
         .chat-message.user {
-          justify-content: flex-end;
+          align-items: flex-end;
         }
         
         .chat-bubble {
@@ -336,6 +388,81 @@ const ChatBot = () => {
           margin-top: 5px;
           display: block;
           text-align: right;
+        }
+        
+        /* Film Kartları */
+        .chat-films-container {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-top: 10px;
+          max-width: 90%;
+        }
+
+        .chat-film-card {
+          display: flex;
+          background-color: rgba(22, 22, 29, 0.7);
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+          transition: all 0.3s ease;
+          cursor: pointer;
+          border: 1px solid rgba(83, 209, 255, 0.15);
+        }
+
+        .chat-film-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 0 10px rgba(83, 209, 255, 0.3);
+          border-color: rgba(83, 209, 255, 0.3);
+        }
+
+        .chat-film-poster {
+          width: 60px;
+          min-width: 60px;
+          height: 90px;
+          overflow: hidden;
+        }
+
+        .chat-film-poster img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          transition: transform 0.3s ease;
+        }
+
+        .chat-film-card:hover .chat-film-poster img {
+          transform: scale(1.05);
+        }
+
+        .chat-film-info {
+          padding: 8px 12px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          flex: 1;
+        }
+
+        .chat-film-title {
+          margin: 0 0 5px 0;
+          font-size: 14px;
+          font-weight: 600;
+          background: var(--gradient-1);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          line-height: 1.2;
+        }
+
+        .chat-film-meta {
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.7);
+        }
+
+        .chat-film-rating {
+          color: var(--warning);
+          font-weight: 500;
         }
         
         /* Typing Animation */
