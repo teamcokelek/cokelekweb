@@ -1,5 +1,7 @@
 # Cokelek Film Chatbot Projesi
 #TDDİ2025 #BilişimVadisi
+
+
 Bu proje, film veritabanına erişen ve film önerileri sunan bir chatbot içeren web uygulamasıdır. Chatbot, kullanıcıların film hakkında sorular sormasına ve filmlerle ilgili öneriler almasına olanak tanır.
 
 ## 📋 Özellikler
