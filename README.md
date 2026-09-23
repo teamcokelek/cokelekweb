@@ -99,4 +99,4 @@ cokelek-film-project/
 
 ---
 
-Projeyle ilgili sorular için: [email@example.com](mailto:email@example.com)
+Projeyle ilgili sorular için: [teamcokelek@gmail.com](mailto:teamcokelek@gmail.com)
